@@ -1,0 +1,3 @@
+services:
+  texture_engine:
+    build: ./apps/texture_engine/.
