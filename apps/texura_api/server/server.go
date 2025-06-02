@@ -11,5 +11,5 @@ func Start() error {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
-	return http.ListenAndServe(":8080", r)
+	return http.ListenAndServe(":7070", r)
 }

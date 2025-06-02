@@ -12,3 +12,8 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  texura_api:
+    build: ./apps/texura_api/.
+    ports:
+      - "7070:7070"
