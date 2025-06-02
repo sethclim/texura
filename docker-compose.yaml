@@ -1,0 +1,14 @@
+services:
+  texture_engine:
+    build: ./apps/texture_engine/.
+    volumes:
+    - "./output:/home/huggingface/output/"
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
