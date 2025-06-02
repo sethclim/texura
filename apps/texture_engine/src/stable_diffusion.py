@@ -32,7 +32,7 @@ def load_image(path):
 
 
 def remove_unused_args(p):
-    params = inspect.signature(p.pipeline).parameters.keys()
+    params = inspect.signature(p._pipeline).parameters.keys()
     args = {
         "prompt": p.prompt,
         "negative_prompt": p.negative_prompt,
@@ -45,20 +45,20 @@ def remove_unused_args(p):
         "guidance_scale": p.scale,
         "image_guidance_scale": p.image_scale,
         "strength": p.strength,
-        "generator": p.generator,
+        "generator": p._generator,
     }
     return {p: args[p] for p in params if p in args}
 
 
 def stable_diffusion_pipeline(p):
-    p.dtype = torch.float16 if p.half else torch.float32
+    p._dtype = torch.float16 if p.half else torch.float32
 
     if p.onnx:
-        p.diffuser = OnnxStableDiffusionPipeline
-        p.revision = "onnx"
+        p._diffuser = OnnxStableDiffusionPipeline
+        p._revision = "onnx"
     else:
-        p.diffuser = DiffusionPipeline
-        p.revision = "fp16" if p.half else "main"
+        p._diffuser = DiffusionPipeline
+        p._revision = "fp16" if p.half else "main"
 
     autos = argparse.Namespace(
         **{
@@ -71,20 +71,20 @@ def stable_diffusion_pipeline(p):
     is_auto_pipeline = config["_class_name"] in [autos.sd, autos.sdxl]
 
     if is_auto_pipeline:
-        p.diffuser = AutoPipelineForText2Image
+        p._diffuser = AutoPipelineForText2Image
 
     if p.image is not None:
-        if p.revision == "onnx":
-            p.diffuser = OnnxStableDiffusionImg2ImgPipeline
+        if p._revision == "onnx":
+            p._diffuser = OnnxStableDiffusionImg2ImgPipeline
         elif is_auto_pipeline:
-            p.diffuser = AutoPipelineForImage2Image
+            p._diffuser = AutoPipelineForImage2Image
         p.image = load_image(p.image)
 
     if p.mask is not None:
-        if p.revision == "onnx":
-            p.diffuser = OnnxStableDiffusionInpaintPipeline
+        if p._revision == "onnx":
+            p._diffuser = OnnxStableDiffusionInpaintPipeline
         elif is_auto_pipeline:
-            p.diffuser = AutoPipelineForInpainting
+            p._diffuser = AutoPipelineForInpainting
         p.mask = load_image(p.mask)
 
     if p.token is None:
@@ -94,27 +94,27 @@ def stable_diffusion_pipeline(p):
     if p.seed == 0:
         p.seed = torch.random.seed()
 
-    if p.revision == "onnx":
+    if p._revision == "onnx":
         p.seed = p.seed >> 32 if p.seed > 2**32 - 1 else p.seed
-        p.generator = np.random.RandomState(p.seed)
+        p._generator = np.random.RandomState(p.seed)
     else:
-        p.generator = torch.Generator(device=p.device).manual_seed(p.seed)
+        p._generator = torch.Generator(device=p.device).manual_seed(p.seed)
 
     print("load pipeline start:", iso_date_time(), flush=True)
 
     with warnings.catch_warnings():
         for c in [UserWarning, FutureWarning]:
             warnings.filterwarnings("ignore", category=c)
-        pipeline = p.diffuser.from_pretrained(
+        pipeline = p._diffuser.from_pretrained(
             p.model,
-            torch_dtype=p.dtype,
-            revision=p.revision,
+            torch_dtype=p._dtype,
+            revision=p._revision,
             use_auth_token=p.token,
         ).to(p.device)
 
-    if p.scheduler is not None:
-        scheduler = getattr(schedulers, p.scheduler)
-        pipeline.scheduler = scheduler.from_config(pipeline.scheduler.config)
+    if p._scheduler is not None:
+        scheduler = getattr(schedulers, p._scheduler)
+        pipeline._scheduler = scheduler.from_config(pipeline.scheduler.config)
 
     if p.skip:
         pipeline.safety_checker = None
@@ -131,7 +131,7 @@ def stable_diffusion_pipeline(p):
     if p.vae_tiling:
         pipeline.enable_vae_tiling()
 
-    p.pipeline = pipeline
+    p._pipeline = pipeline
 
     print("loaded models after:", iso_date_time(), flush=True)
 
@@ -146,14 +146,17 @@ def stable_diffusion_inference(p):
         .decode("utf-8", "ignore")
     )
     for j in range(p.iters):
-        result = p.pipeline(**remove_unused_args(p))
+        result = p._pipeline(**remove_unused_args(p))
 
         for i, img in enumerate(result.images):
             idx = j * p.samples + i + 1
             out = f"{prefix}__steps_{p.steps}__scale_{p.scale:.2f}__seed_{p.seed}__n_{idx}.png"
+
+            print(f"OUT {out}")
             img.save(os.path.join("output", out))
 
     print("completed pipeline:", iso_date_time(), flush=True)
+
 
 
 def parse_args():
@@ -298,12 +301,3 @@ def parse_args():
     return args
 
 
-def main():
-    args = parse_args()
-    print(f"args {args}")
-    pipeline = stable_diffusion_pipeline(args)
-    stable_diffusion_inference(pipeline)
-
-
-if __name__ == "__main__":
-    main()

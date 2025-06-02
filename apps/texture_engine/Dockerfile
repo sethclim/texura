@@ -20,7 +20,7 @@ RUN mkdir -p /home/huggingface/.cache/huggingface \
     && mkdir -p /home/huggingface/input \
     && mkdir -p /home/huggingface/output
 
-COPY main.py main.py
+COPY src/ .
 COPY token.txt token.txt
 
 ENTRYPOINT [ "python", "main.py", "a texture of bricks" ]
