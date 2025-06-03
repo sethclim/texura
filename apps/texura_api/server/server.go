@@ -50,7 +50,8 @@ func Start() error {
 
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 		if err != nil {
-			// handle error
+			fmt.Println("reqc create error:", err)
+			return
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -58,7 +59,8 @@ func Start() error {
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			// handle error
+			fmt.Println("req error:", err)
+			return
 		}
 		defer resp.Body.Close()
 
