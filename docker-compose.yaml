@@ -15,5 +15,8 @@ services:
 
   texura_api:
     build: ./apps/texura_api/.
+    env_file:
+    - ./apps/texura_api/.env
     ports:
       - "7070:7070"
+      
