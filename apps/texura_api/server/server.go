@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 )
 
 type InferenceRequest struct {
@@ -18,6 +19,19 @@ type InferenceRequest struct {
 
 func Start() error {
 	r := chi.NewRouter()
+
+	fe_url := os.Getenv("FRONTEND_URL")
+
+	// CORS middleware
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{fe_url},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
@@ -70,7 +84,7 @@ func Start() error {
 			return
 		}
 		fmt.Println("Response:", string(body))
-
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(string(body)))
 	})
 	return http.ListenAndServe(":7070", r)
