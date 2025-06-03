@@ -1,2 +1,4 @@
 token.txt
 output/
+*.exe
+.env
