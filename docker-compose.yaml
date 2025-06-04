@@ -1,8 +1,10 @@
 services:
   texture_engine:
     build: ./apps/texture_engine/.
-    volumes:
-    - "./output:/home/huggingface/output/"
+    env_file:
+    - ./apps/texture_engine/.env
+    # volumes:
+    # - "./output:/home/huggingface/output/"
     ports:
       - "8080:8080"
     deploy:
@@ -12,7 +14,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
   texura_api:
     build: ./apps/texura_api/.
     env_file:
