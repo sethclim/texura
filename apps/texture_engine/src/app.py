@@ -1,7 +1,11 @@
 
 
+import glob
 import logging
+import os
 
+import boto3
+from botocore.client import Config
 from requests import request
 from stable_diffusion import stable_diffusion_inference, stable_diffusion_pipeline
 import flask
@@ -46,6 +50,17 @@ class InferenceArgsModel(BaseModel):
     _scheduler : any = PrivateAttr(default=None)
 
 
+
+s3 = boto3.client(
+    's3',
+    endpoint_url=os.environ['MINIO_ENDPOINT'],
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRECT_ACCESS_KEY'],
+    config=Config(signature_version='s3v4'),
+    region_name=os.environ['MINIO_REGION'],
+)
+
+
 @app.route("/ping", methods=["GET"])
 def ping():
     """Determine if the container is working and healthy."""
@@ -75,5 +90,12 @@ def invoke():
     pipeline = stable_diffusion_pipeline(args)
     stable_diffusion_inference(pipeline)
 
+
+    files = glob.glob("/home/huggingface/output/*.png")
+    logging.info(f"files {files}")
+
+    upload_name = 'uploads/texure.png'
+    s3.upload_file(files[0], 'my-bucket', upload_name)
+
     status = 200
-    return flask.Response(response="\n", status=status, mimetype="application/json")
+    return flask.Response(response=upload_name, status=status, mimetype="application/json")

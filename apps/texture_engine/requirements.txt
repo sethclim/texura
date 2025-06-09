@@ -10,3 +10,4 @@ xformers==0.0.22.post7
 flask
 waitress
 pydantic
+boto3
