@@ -93,7 +93,9 @@ def invoke():
 
     files = glob.glob("/home/huggingface/output/*.png")
     logging.info(f"files {files}")
-    s3.upload_file(files[0], 'my-bucket', 'uploads/texure.png')
+
+    upload_name = 'uploads/texure.png'
+    s3.upload_file(files[0], 'my-bucket', upload_name)
 
     status = 200
-    return flask.Response(response="\n", status=status, mimetype="application/json")
+    return flask.Response(response=upload_name, status=status, mimetype="application/json")

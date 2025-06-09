@@ -4,6 +4,7 @@ import { useState } from "react"
 export const InferenceCard = () => {
 
     const [prompt, setPrompt] = useState("")
+    // const [textureURL, setTextureURL] = useState<null | string>()
 
     const { isPending, error, data, isFetching, refetch } = useQuery({
         queryKey: ['repoData'],
@@ -23,7 +24,7 @@ export const InferenceCard = () => {
                 throw new Error('Network response was not ok');
             }
             
-            return response.json();
+            return response.text();
         },
         refetchOnWindowFocus: false,
         enabled: false
@@ -32,6 +33,8 @@ export const InferenceCard = () => {
     const requestTexture = () => {
         console.log("prompt " + prompt)
         refetch();
+        // console.log("res " + res)
+        // setTextureURL(res)
     }
     
     // if (isPending) return 'Loading...'
@@ -40,6 +43,9 @@ export const InferenceCard = () => {
 
     return(
         <>
+            {
+                data ? <img src={data} /> : null
+            }
             <input onChange={e => setPrompt(e.target.value)} />
             <button onClick={() => requestTexture()}>
                 Generate Texture
@@ -47,3 +53,4 @@ export const InferenceCard = () => {
         </>
     )
 }
+
