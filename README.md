@@ -8,32 +8,34 @@ AI game texture generation platform
 .
 ├── apps/
 │   ├── texture_engine/       # Core AI engine for texture generation using Stable Diffusion
-│   └── texura_api/           # Go/Go-Chi based service layer exposing texture engine functionality via api
+│   └── texura_api/           # Go/Go-Chi APIvservice layer exposing texture engine functionality
 │
 ├── frontend/                 # Web frontend for users to interact with the texture platform
 │
 ├── infra/
+│   ├── scripts/              # Helper scripts for managing cluster
 │   └── terraform/
-│       └── env/
-│           ├── development/  # Infrastructure as code (IaC) for the development environment
-│           └── production/   # IaC for production deployment
+│       └── environments/
+│           ├── dev/          # Infrastructure as code (IaC) for the development environment
+│           └── prod/         # IaC for production deployment
 ```
 
 ## Dependencies and Tools
 
 ### Platform
-- Kubernetes
-- TerraForm
-- Docker
+- [Kubernetes](https://kubernetes.io/)
+- [TerraForm](https://developer.hashicorp.com/terraform/)
+- [Docker](https://www.docker.com/)
 
 ### Backend Services
-- GO
-- Python
-- Stable Diffusion
+- [GO](https://go.dev/)
+- [Python](https://www.python.org/)
+- [Stable Diffusion](https://stability.ai/)
+- [MinIO](https://min.io/) (local S3)
 
 ### Frontend
-- React
-- TanStack Query
+- [React](https://react.dev/)
+- [TanStack Query](https://tanstack.com/query/latest)
 
 ## Local Development 
 
@@ -43,6 +45,16 @@ docker compose up
 ```
 
 ### Local KinD Cluster 
+install docker [docs.docker.com/desktop/setup/install/linux/](https://docs.docker.com/desktop/setup/install/linux/)
+
+```
+docker --version
+```
+
+install terraform [developer.hashicorp.com/terraform/install](https://developer.hashicorp.com/terraform/install)
+```
+terraform --version
+```
 
 ```
 terraform init
