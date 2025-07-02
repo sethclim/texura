@@ -29,19 +29,32 @@ resource "kind_cluster" "this" {
   }
 }
 
-resource "kubernetes_config_map" "local_registry_hosting" {
-  metadata {
-    name      = "local-registry-hosting"
-    namespace = "kube-public"
+resource "null_resource" "execute_python" {
+  depends_on = [kind_cluster.this]
+  triggers = {
+    always_run = "${timestamp()}"
   }
 
-  data = {
-    "localRegistryHosting.v1" = <<-EOT
-      host: "localhost:${var.reg_port}"
-      help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
-    EOT
+  provisioner "local-exec" {
+    command     = "python3 build_and_load_images.py"
+    working_dir = "${path.module}/../../../scripts/"
   }
 }
+
+
+# resource "kubernetes_config_map" "local_registry_hosting" {
+#   metadata {
+#     name      = "local-registry-hosting"
+#     namespace = "kube-public"
+#   }
+
+#   data = {
+#     "localRegistryHosting.v1" = <<-EOT
+#       host: "localhost:${var.reg_port}"
+#       help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+#     EOT
+#   }
+# }
 
 
 resource "kubernetes_deployment" "test-deploy" {
@@ -70,7 +83,7 @@ resource "kubernetes_deployment" "test-deploy" {
 
       spec {
         container {
-          image = "texura-texura_api:latest"
+          image = "texura_api:latest"
           name  = "api"
 
           image_pull_policy = "IfNotPresent"
@@ -88,8 +101,8 @@ resource "kubernetes_deployment" "test-deploy" {
 
           liveness_probe {
             http_get {
-              path = "/"
-              port = 80
+              path = "/health"
+              port = 7070
 
               http_header {
                 name  = "X-Custom-Header"
