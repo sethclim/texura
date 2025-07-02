@@ -20,7 +20,13 @@ resource "kind_cluster" "this" {
       extra_port_mappings {
         container_port = 80
         host_port      = var.host_port
+
       }
+      extra_port_mappings {
+        container_port = 30080
+        host_port      = var.host_port_30080
+      }
+
     }
 
     node {
@@ -88,6 +94,10 @@ resource "kubernetes_deployment" "test-deploy" {
 
           image_pull_policy = "IfNotPresent"
 
+          port {
+            container_port = 7070
+          }
+
           resources {
             limits = {
               cpu    = "0.5"
@@ -118,6 +128,29 @@ resource "kubernetes_deployment" "test-deploy" {
     }
   }
 }
+
+resource "kubernetes_service" "texura_api_nodeport" {
+  metadata {
+    name      = "texura-api"
+    namespace = "default"
+  }
+
+  spec {
+    selector = {
+      test = "MyApp" # this label must match your pod/deployment labels
+    }
+
+    type = "NodePort"
+
+    port {
+      port        = 7070  # service port inside the cluster
+      target_port = 7070  # container port your pod listens on
+      node_port   = 30080 # port exposed on the node (your local machine)
+      protocol    = "TCP"
+    }
+  }
+}
+
 
 # resource "kubernetes_deployment" "test-deploy2" {
 #   metadata {
