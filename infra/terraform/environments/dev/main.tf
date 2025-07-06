@@ -98,6 +98,11 @@ resource "kubernetes_deployment" "test-deploy" {
             container_port = 7070
           }
 
+          env {
+            name  = "STABLE_DIFFUSION_SERVICE_URL"
+            value = "http://texture-engine:8080/invocations"
+          }
+
           resources {
             limits = {
               cpu    = "0.5"
@@ -152,62 +157,108 @@ resource "kubernetes_service" "texura_api_nodeport" {
 }
 
 
-# resource "kubernetes_deployment" "test-deploy2" {
-#   metadata {
-#     name = "textureapidep"
-#     labels = {
-#       test = "TextureApi"
-#     }
-#   }
+resource "kubernetes_deployment" "test-deploy2" {
+  metadata {
+    name = "texture-engine-deployment"
+    labels = {
+      test = "TextureEngine"
+    }
+  }
 
-#   spec {
-#     replicas = 1
+  spec {
+    replicas = 1
 
-#     selector {
-#       match_labels = {
-#         test = "TextureApi"
-#       }
-#     }
+    selector {
+      match_labels = {
+        test = "TextureEngine"
+      }
+    }
 
-#     template {
-#       metadata {
-#         labels = {
-#           test = "TextureApi"
-#         }
-#       }
+    template {
+      metadata {
+        labels = {
+          test = "TextureEngine"
+        }
+      }
 
-#       spec {
-#         container {
-#           image = "texura-texura_api::latest"
-#           name  = "texura-api"
+      spec {
+        container {
+          image = "texture_engine:latest"
+          name  = "texture-engine"
 
-#           resources {
-#             limits = {
-#               cpu    = "0.5"
-#               memory = "512Mi"
-#             }
-#             requests = {
-#               cpu    = "250m"
-#               memory = "50Mi"
-#             }
-#           }
+          image_pull_policy = "IfNotPresent"
 
-#           liveness_probe {
-#             http_get {
-#               path = "/"
-#               port = var.host_port
+          port {
+            container_port = 8080
+          }
 
-#               http_header {
-#                 name  = "X-Custom-Header"
-#                 value = "Awesome"
-#               }
-#             }
+          env {
+            name  = "MINIO_ENDPOINT"
+            value = "http://minio:9000"
+          }
 
-#             initial_delay_seconds = 3
-#             period_seconds        = 3
-#           }
-#         }
-#       }
-#     }
-#   }
-# }
+          env {
+            name  = "AWS_ACCESS_KEY_ID"
+            value = "minioadmin"
+          }
+
+          env {
+            name  = "AWS_SECRECT_ACCESS_KEY"
+            value = "minioadmin"
+          }
+
+          env {
+            name  = "MINIO_REGION"
+            value = "us-east-1"
+          }
+
+          resources {
+            limits = {
+              cpu    = "0.5"
+              memory = "512Mi"
+            }
+            requests = {
+              cpu    = "250m"
+              memory = "50Mi"
+            }
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/ping"
+              port = 8080
+
+              http_header {
+                name  = "X-Custom-Header"
+                value = "Awesome"
+              }
+            }
+
+            initial_delay_seconds = 5
+            period_seconds        = 10
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "texura_engine_nodeport" {
+  metadata {
+    name      = "texture-engine"
+    namespace = "default"
+  }
+
+  spec {
+    selector = {
+      test = "TextureEngine"
+    }
+
+    type = "ClusterIP"
+
+    port {
+      port        = 8080
+      target_port = 8080
+    }
+  }
+}
