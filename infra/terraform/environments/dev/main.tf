@@ -35,6 +35,17 @@ resource "kind_cluster" "this" {
   }
 }
 
+provider "helm" {
+  kubernetes {
+    config_path = pathexpand(var.kubeconfig_file)
+  }
+}
+
+provider "kubernetes" {
+  config_path = pathexpand(var.kubeconfig_file)
+}
+
+
 resource "null_resource" "execute_python" {
   depends_on = [kind_cluster.this]
   triggers = {
@@ -62,6 +73,21 @@ resource "null_resource" "execute_python" {
 #   }
 # }
 
+resource "kubernetes_secret" "minio_secret_in_app_ns" {
+  metadata {
+    name      = "minio-secret"
+    namespace = "default" # Replace with your app's namespace
+  }
+
+  data = {
+    accesskey = "admin"
+    secretkey = random_password.minio.result
+  }
+
+  type = "Opaque"
+}
+
+
 
 resource "kubernetes_deployment" "test-deploy" {
   metadata {
@@ -70,6 +96,8 @@ resource "kubernetes_deployment" "test-deploy" {
       test = "MyApp"
     }
   }
+
+  depends_on = [kubernetes_secret.minio_secret_in_app_ns]
 
   spec {
     replicas = 1
@@ -101,6 +129,36 @@ resource "kubernetes_deployment" "test-deploy" {
           env {
             name  = "STABLE_DIFFUSION_SERVICE_URL"
             value = "http://texture-engine:8080/invocations"
+          }
+
+          env {
+            name  = "MINIO_ENDPOINT"
+            value = "http://minio.block-storage.svc.cluster.local"
+          }
+
+          env {
+            name = "AWS_ACCESS_KEY_ID"
+            value_from {
+              secret_key_ref {
+                name = "minio-secret"
+                key  = "accesskey"
+              }
+            }
+          }
+
+          env {
+            name = "AWS_SECRET_ACCESS_KEY"
+            value_from {
+              secret_key_ref {
+                name = "minio-secret"
+                key  = "secretkey"
+              }
+            }
+          }
+
+          env {
+            name  = "MINIO_REGION"
+            value = "us-east-1"
           }
 
           resources {
@@ -165,6 +223,8 @@ resource "kubernetes_deployment" "test-deploy2" {
     }
   }
 
+  depends_on = [kubernetes_secret.minio_secret_in_app_ns]
+
   spec {
     replicas = 1
 
@@ -194,17 +254,22 @@ resource "kubernetes_deployment" "test-deploy2" {
 
           env {
             name  = "MINIO_ENDPOINT"
-            value = "http://minio:9000"
+            value = "http://minio.block-storage.svc.cluster.local"
           }
 
           env {
             name  = "AWS_ACCESS_KEY_ID"
-            value = "minioadmin"
+            value = "admin"
           }
 
           env {
-            name  = "AWS_SECRECT_ACCESS_KEY"
-            value = "minioadmin"
+            name = "AWS_SECRET_ACCESS_KEY"
+            value_from {
+              secret_key_ref {
+                name = "minio-secret"
+                key  = "secretkey"
+              }
+            }
           }
 
           env {

@@ -24,3 +24,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     load_image_kind(args.image, args.cluster)
+    
