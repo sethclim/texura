@@ -1,3 +1,5 @@
+<img width="1283" height="651" alt="Image" src="https://github.com/user-attachments/assets/d4da1040-b4fd-4c2a-ada2-75bf3d64c468" />
+
 # Texura
 
 AI game texture generation platform
