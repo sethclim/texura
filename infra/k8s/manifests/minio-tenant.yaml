@@ -1,0 +1,33 @@
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+    name: minio
+    namespace: block-storage
+spec:
+    # configuration:
+    #   name: storage-env-configuration
+    credsSecret:
+        name: minio-secret
+    image: minio/minio:RELEASE.2022-06-07T00-33-41Z
+    imagePullPolicy: IfNotPresent
+    pools:
+        - name: pool-0
+          resources:
+              requests:
+                  cpu: "1"
+                  memory: 2Gi
+          servers: 1
+          volumeClaimTemplate:
+              metadata:
+                  name: data
+              spec:
+                  accessModes:
+                      - ReadWriteOnce
+                  resources:
+                      requests:
+                          storage: "5Gi"
+                  storageClassName: standard
+          volumesPerServer: 4
+    requestAutoCert: false
+    users:
+        - name: storage-user-0

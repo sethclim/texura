@@ -16,6 +16,12 @@ variable "host_port" {
   description = "The host port to be bound to port 80."
 }
 
+variable "host_port_30080" {
+  type        = number
+  default     = 30080
+  description = "The host port to be bound to port 30080."
+}
+
 variable "kubeconfig_file" {
   type        = string
   default     = "~/.kube/config"
