@@ -15,6 +15,8 @@ AI game texture generation platform
 ├── frontend/                 # Web frontend for users to interact with the texture platform
 │
 ├── infra/
+│   ├── k8s/                  # Raw Kubernetes resources
+│   │   └── manifests/
 │   ├── scripts/              # Helper scripts for managing cluster
 │   └── terraform/
 │       └── environments/
