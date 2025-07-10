@@ -4,7 +4,7 @@
 
 AI game texture generation platform
 
-## Project Structure 
+## Project Structure
 
 ```
 .
@@ -25,28 +25,33 @@ AI game texture generation platform
 ## Dependencies and Tools
 
 ### Platform
-- [Kubernetes](https://kubernetes.io/)
-- [TerraForm](https://developer.hashicorp.com/terraform/)
-- [Docker](https://www.docker.com/)
+
+-   [Kubernetes](https://kubernetes.io/)
+-   [TerraForm](https://developer.hashicorp.com/terraform/)
+-   [Docker](https://www.docker.com/)
 
 ### Backend Services
-- [GO](https://go.dev/)
-- [Python](https://www.python.org/)
-- [Stable Diffusion](https://stability.ai/)
-- [MinIO](https://min.io/) (local S3)
+
+-   [GO](https://go.dev/)
+-   [Python](https://www.python.org/)
+-   [Stable Diffusion](https://stability.ai/)
+-   [MinIO](https://min.io/) (local S3)
 
 ### Frontend
-- [React](https://react.dev/)
-- [TanStack Query](https://tanstack.com/query/latest)
 
-## Local Development 
+-   [React](https://react.dev/)
+-   [TanStack Query](https://tanstack.com/query/latest)
+
+## Local Development
 
 ### Quickstart
+
 ```
-docker compose up 
+docker compose up
 ```
 
-### Local KinD Cluster 
+### Local KinD Cluster
+
 install docker [docs.docker.com/desktop/setup/install/linux/](https://docs.docker.com/desktop/setup/install/linux/)
 
 ```
@@ -54,6 +59,7 @@ docker --version
 ```
 
 install terraform [developer.hashicorp.com/terraform/install](https://developer.hashicorp.com/terraform/install)
+
 ```
 terraform --version
 ```
@@ -65,4 +71,3 @@ terraform init
 ```
 terraform apply
 ```
-
