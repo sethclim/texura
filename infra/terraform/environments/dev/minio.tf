@@ -7,7 +7,7 @@ resource "helm_release" "minio_operator" {
   dependency_update = "true"
   version           = "5.0.18"
 
-  depends_on = [kind_cluster.this] # or kind_cluster.this
+  depends_on = [minikube_cluster.docker]
 }
 
 resource "random_password" "minio" {

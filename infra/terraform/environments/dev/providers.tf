@@ -1,9 +1,13 @@
 terraform {
   required_providers {
-    kind = {
-      source  = "tehcyx/kind"
-      version = "0.5.1"
+    minikube = {
+      source  = "scott-the-programmer/minikube"
+      version = "0.5.2"
     }
+    # kind = {
+    #   source  = "tehcyx/kind"
+    #   version = "0.5.1"
+    # }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.23"

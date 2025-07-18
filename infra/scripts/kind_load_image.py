@@ -5,10 +5,10 @@
 import subprocess
 import argparse
 
-def load_image_kind(image, cluster="kind"):
+def load_image_kind(image, cluster="minikube"):
 
     try:
-        res = subprocess.run(["kind", "load", "docker-image", image, "--name",  cluster], text=True)
+        res = subprocess.run(["minikube", "image", "load", image, "--profile",  cluster], text=True)
         print(res)
 
     except subprocess.CalledProcessError as e:
