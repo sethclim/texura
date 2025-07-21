@@ -7,7 +7,7 @@ resource "helm_release" "minio_operator" {
   dependency_update = "true"
   version           = "5.0.18"
 
-  depends_on = [kind_cluster.this] # or kind_cluster.this
+  depends_on = [minikube_cluster.docker]
 }
 
 resource "random_password" "minio" {
@@ -37,6 +37,7 @@ resource "kubernetes_secret" "minio_secret" {
 resource "kubectl_manifest" "tenant" {
   yaml_body = file("../../../../infra/k8s/manifests/minio-tenant.yaml")
   depends_on = [
+    helm_release.minio_operator,
     kubernetes_secret.minio_secret
   ]
 }

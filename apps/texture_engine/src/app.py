@@ -18,6 +18,9 @@ import torch
 logging.basicConfig(level=logging.INFO, force=True)
 app = flask.Flask(__name__)
 
+print(torch.version.cuda) 
+print(torch.cuda.is_available())   
+
 class InferenceArgsModel(BaseModel):
     attention_slicing : bool = False
     device : str = "cuda"

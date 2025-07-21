@@ -1,39 +1,82 @@
-resource "kind_cluster" "this" {
-  name            = var.cluster_name
-  node_image      = "kindest/node:${var.cluster_version}"
-  kubeconfig_path = pathexpand(var.kubeconfig_file)
-  wait_for_ready  = true
-
-  kind_config {
-    kind        = "Cluster"
-    api_version = "kind.x-k8s.io/v1alpha4"
-
-    containerd_config_patches = [
-      <<-EOT
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-        endpoint = ["http://local-registry:5000"]
-      EOT
-    ]
-
-    node {
-      role = "control-plane"
-      extra_port_mappings {
-        container_port = 80
-        host_port      = var.host_port
-
-      }
-      extra_port_mappings {
-        container_port = 30080
-        host_port      = var.host_port_30080
-      }
-
-    }
-
-    node {
-      role = "worker"
-    }
-  }
+provider "minikube" {
+  kubernetes_version = "v1.30.0"
 }
+
+resource "minikube_cluster" "docker" {
+  driver       = "docker"
+  cluster_name = "texura-dev"
+
+  addons = [
+    "default-storageclass",
+    "storage-provisioner",
+    "ingress"
+  ]
+  gpus    = "nvidia"
+  kvm_gpu = true
+}
+
+provider "kubernetes" {
+  host = minikube_cluster.docker.host
+
+  client_certificate     = minikube_cluster.docker.client_certificate
+  client_key             = minikube_cluster.docker.client_key
+  cluster_ca_certificate = minikube_cluster.docker.cluster_ca_certificate
+}
+
+resource "null_resource" "label_gpu_node" {
+  provisioner "local-exec" {
+    command = "kubectl label node texura-dev nvidia.com/gpu.present=true --overwrite"
+  }
+
+  depends_on = [minikube_cluster.docker]
+}
+
+resource "helm_release" "nvidia_device_plugin" {
+  name       = "nvidia-device-plugin"
+  repository = "https://nvidia.github.io/k8s-device-plugin"
+  chart      = "nvidia-device-plugin"
+  version    = "0.15.0"
+
+  namespace = "kube-system"
+}
+
+
+# resource "kind_cluster" "this" {
+#   name            = var.cluster_name
+#   node_image      = "kindest/node:${var.cluster_version}"
+#   kubeconfig_path = pathexpand(var.kubeconfig_file)
+#   wait_for_ready  = true
+
+#   kind_config {
+#     kind        = "Cluster"
+#     api_version = "kind.x-k8s.io/v1alpha4"
+
+#     containerd_config_patches = [
+#       <<-EOT
+#       [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+#         endpoint = ["http://local-registry:5000"]
+#       EOT
+#     ]
+
+#     node {
+#       role = "control-plane"
+#       extra_port_mappings {
+#         container_port = 80
+#         host_port      = var.host_port
+
+#       }
+#       extra_port_mappings {
+#         container_port = 30080
+#         host_port      = var.host_port_30080
+#       }
+
+#     }
+
+#     node {
+#       role = "worker"
+#     }
+#   }
+# }
 
 provider "helm" {
   kubernetes {
@@ -41,13 +84,13 @@ provider "helm" {
   }
 }
 
-provider "kubernetes" {
-  config_path = pathexpand(var.kubeconfig_file)
-}
+# provider "kubernetes" {
+#   config_path = pathexpand(var.kubeconfig_file)
+# }
 
 
 resource "null_resource" "execute_python" {
-  depends_on = [kind_cluster.this]
+  depends_on = [minikube_cluster.docker]
   triggers = {
     always_run = "${timestamp()}"
   }
@@ -59,19 +102,19 @@ resource "null_resource" "execute_python" {
 }
 
 
-# resource "kubernetes_config_map" "local_registry_hosting" {
-#   metadata {
-#     name      = "local-registry-hosting"
-#     namespace = "kube-public"
-#   }
+# # resource "kubernetes_config_map" "local_registry_hosting" {
+# #   metadata {
+# #     name      = "local-registry-hosting"
+# #     namespace = "kube-public"
+# #   }
 
-#   data = {
-#     "localRegistryHosting.v1" = <<-EOT
-#       host: "localhost:${var.reg_port}"
-#       help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
-#     EOT
-#   }
-# }
+# #   data = {
+# #     "localRegistryHosting.v1" = <<-EOT
+# #       host: "localhost:${var.reg_port}"
+# #       help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+# #     EOT
+# #   }
+# # }
 
 resource "kubernetes_secret" "minio_secret_in_app_ns" {
   metadata {
@@ -91,7 +134,7 @@ resource "kubernetes_secret" "minio_secret_in_app_ns" {
 
 resource "kubernetes_deployment" "test-deploy" {
   metadata {
-    name = "terraform"
+    name = "texura-api-deployment"
     labels = {
       test = "MyApp"
     }
@@ -192,6 +235,28 @@ resource "kubernetes_deployment" "test-deploy" {
   }
 }
 
+# resource "kubernetes_service" "texura_api_nodeport" {
+#   metadata {
+#     name      = "texura-api"
+#     namespace = "default"
+#   }
+
+#   spec {
+#     selector = {
+#       test = "MyApp" # this label must match your pod/deployment labels
+#     }
+
+#     type = "NodePort"
+
+#     port {
+#       port        = 7070  # service port inside the cluster
+#       target_port = 7070  # container port your pod listens on
+#       node_port   = 30080 # port exposed on the node (your local machine)
+#       protocol    = "TCP"
+#     }
+#   }
+# }
+
 resource "kubernetes_service" "texura_api_nodeport" {
   metadata {
     name      = "texura-api"
@@ -200,20 +265,56 @@ resource "kubernetes_service" "texura_api_nodeport" {
 
   spec {
     selector = {
-      test = "MyApp" # this label must match your pod/deployment labels
+      test = "MyApp"
     }
 
-    type = "NodePort"
+    type = "ClusterIP"
 
     port {
-      port        = 7070  # service port inside the cluster
-      target_port = 7070  # container port your pod listens on
-      node_port   = 30080 # port exposed on the node (your local machine)
-      protocol    = "TCP"
+      port        = 7070
+      target_port = 7070
     }
   }
 }
 
+
+resource "kubernetes_ingress_v1" "example" {
+  metadata {
+    name = "example-ingress"
+    annotations = {
+      "nginx.ingress.kubernetes.io/rewrite-target" = "/"
+    }
+  }
+
+  spec {
+    ingress_class_name = "nginx"
+
+    rule {
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "texura-api"
+              port {
+                number = 7070
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "null_resource" "patch_ingress_nginx" {
+  depends_on = [kubernetes_ingress_v1.example]
+  provisioner "local-exec" {
+    command = "kubectl patch svc ingress-nginx-controller -n ingress-nginx --type=merge --patch-file=patch-loadbalancer.json"
+  }
+}
 
 resource "kubernetes_deployment" "test-deploy2" {
   metadata {
@@ -279,12 +380,14 @@ resource "kubernetes_deployment" "test-deploy2" {
 
           resources {
             limits = {
-              cpu    = "0.5"
-              memory = "512Mi"
+              cpu              = "1.0"
+              memory           = "5Gi"
+              "nvidia.com/gpu" = "1"
             }
             requests = {
-              cpu    = "250m"
-              memory = "50Mi"
+              cpu              = "500m"
+              memory           = "5Gi"
+              "nvidia.com/gpu" = "1"
             }
           }
 

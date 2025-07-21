@@ -21,7 +21,7 @@ def main():
     for image in images:
         image_build_path = f"{base_path}/{image}"
         build_docker_image(name=image, path=image_build_path)
-        load_image_kind(image, cluster='test')
+        load_image_kind(image, cluster='texura-dev')
 
 if __name__ == '__main__':
     main()
