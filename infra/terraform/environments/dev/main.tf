@@ -23,6 +23,22 @@ provider "kubernetes" {
   cluster_ca_certificate = minikube_cluster.docker.cluster_ca_certificate
 }
 
+resource "null_resource" "label_gpu_node" {
+  provisioner "local-exec" {
+    command = "kubectl label node texura-dev nvidia.com/gpu.present=true --overwrite"
+  }
+
+  depends_on = [minikube_cluster.docker]
+}
+
+resource "helm_release" "nvidia_device_plugin" {
+  name       = "nvidia-device-plugin"
+  repository = "https://nvidia.github.io/k8s-device-plugin"
+  chart      = "nvidia-device-plugin"
+  version    = "0.15.0"
+
+  namespace = "kube-system"
+}
 
 
 # resource "kind_cluster" "this" {
@@ -364,12 +380,14 @@ resource "kubernetes_deployment" "test-deploy2" {
 
           resources {
             limits = {
-              cpu    = "0.5"
-              memory = "512Mi"
+              cpu              = "1.0"
+              memory           = "5Gi"
+              "nvidia.com/gpu" = "1"
             }
             requests = {
-              cpu    = "250m"
-              memory = "50Mi"
+              cpu              = "500m"
+              memory           = "5Gi"
+              "nvidia.com/gpu" = "1"
             }
           }
 

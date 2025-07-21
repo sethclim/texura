@@ -37,6 +37,7 @@ resource "kubernetes_secret" "minio_secret" {
 resource "kubectl_manifest" "tenant" {
   yaml_body = file("../../../../infra/k8s/manifests/minio-tenant.yaml")
   depends_on = [
+    helm_release.minio_operator,
     kubernetes_secret.minio_secret
   ]
 }
