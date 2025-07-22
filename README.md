@@ -42,6 +42,8 @@ AI game texture generation platform
 -   [Python](https://www.python.org/)
 -   [Stable Diffusion](https://stability.ai/)
 -   [MinIO](https://min.io/) (local S3)
+-   [RabbitMQ](https://www.rabbitmq.com/)
+-   [Redis](https://redis.io/)
 
 ### Frontend
 
@@ -56,7 +58,7 @@ AI game texture generation platform
 docker compose up
 ```
 
-### Local KinD Cluster
+### Local Minikube Cluster
 
 install docker [docs.docker.com/desktop/setup/install/linux/](https://docs.docker.com/desktop/setup/install/linux/)
 

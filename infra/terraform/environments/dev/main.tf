@@ -370,6 +370,11 @@ resource "kubernetes_deployment" "test-deploy2" {
           }
 
           env {
+            name  = "RABBIT_MQ_ADDRESS"
+            value = "amqp://user:password@rabbitmq.rabbitmq:5672/"
+          }
+
+          env {
             name = "AWS_SECRET_ACCESS_KEY"
             value_from {
               secret_key_ref {

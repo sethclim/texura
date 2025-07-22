@@ -9,9 +9,16 @@ base_path = "../../apps/"
 
 images = ["texture_engine", "texura_api"]
 
-def build_docker_image(name, path):
+def build_docker_image(name, path, no_cache=False):
+    cmd = ["docker", "build"]
+
+    if no_cache:
+        cmd.append("--no_cache")
+
+    cmd.extend(["-t", name,  path])
+
     try:
-        res = subprocess.run(["docker", "build", "-t", name,  path], text=True)
+        res = subprocess.run(cmd, text=True)
         print(res)
 
     except subprocess.CalledProcessError as e:

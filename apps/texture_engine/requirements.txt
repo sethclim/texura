@@ -11,3 +11,4 @@ flask
 waitress
 pydantic
 boto3
+pika

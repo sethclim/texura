@@ -15,6 +15,8 @@ from pydantic import BaseModel, ValidationError, PrivateAttr
 from typing import Optional
 import torch
 
+import pika
+
 logging.basicConfig(level=logging.INFO, force=True)
 app = flask.Flask(__name__)
 
@@ -64,6 +66,50 @@ s3 = boto3.client(
 )
 
 
+
+def callback(ch, method, properties, body):
+    logging.info(f" [x] Received: {body.decode()}")
+
+    # try:
+    #     json_data = request.get_json()
+    #     logging.info(f"json_data {json_data}")
+    #     args = InferenceArgsModel(**json_data)
+    # except ValidationError as e:
+    #     return {"error": e.errors()}, 400
+    
+    # logging.info(args)
+
+    # pipeline = stable_diffusion_pipeline(args)
+    # stable_diffusion_inference(pipeline)
+
+
+    # files = glob.glob("/home/huggingface/output/*.png")
+    # logging.info(f"files {files}")
+
+    # upload_name = 'uploads/texure.png'
+    # s3.upload_file(files[0], 'my-bucket', upload_name)
+
+
+
+class Consumer:
+
+    def start(self):
+        # Connect to RabbitMQ server (localhost by default)
+        logging.info("RABBIT_MQ_ADDRESS =", os.environ.get("RABBIT_MQ_ADDRESS"))
+        params = pika.URLParameters(os.environ.get("RABBIT_MQ_ADDRESS"))
+        connection = pika.BlockingConnection(params)
+        channel = connection.channel()
+
+        # # Make sure the queue exists
+        # channel.queue_declare(queue='ml_task_queue')
+
+        # Set up subscription on the queue
+        channel.basic_consume(queue='ml_task_queue', on_message_callback=callback, auto_ack=True)
+
+        logging.info(' [*] Waiting for messages. To exit press CTRL+C')
+        channel.start_consuming()
+
+
 @app.route("/ping", methods=["GET"])
 def ping():
     """Determine if the container is working and healthy."""
@@ -77,28 +123,28 @@ def ping():
     return flask.Response(response="\n", status=status, mimetype="application/json")
 
 
-@app.route("/invocations", methods=["POST"])
-def invoke():
-    logging.info("invoke...")
+# @app.route("/invocations", methods=["POST"])
+# def invoke():
+#     logging.info("invoke...")
 
-    try:
-        json_data = request.get_json()
-        logging.info(f"json_data {json_data}")
-        args = InferenceArgsModel(**json_data)
-    except ValidationError as e:
-        return {"error": e.errors()}, 400
+#     try:
+#         json_data = request.get_json()
+#         logging.info(f"json_data {json_data}")
+#         args = InferenceArgsModel(**json_data)
+#     except ValidationError as e:
+#         return {"error": e.errors()}, 400
     
-    logging.info(args)
+#     logging.info(args)
 
-    pipeline = stable_diffusion_pipeline(args)
-    stable_diffusion_inference(pipeline)
+#     pipeline = stable_diffusion_pipeline(args)
+#     stable_diffusion_inference(pipeline)
 
 
-    files = glob.glob("/home/huggingface/output/*.png")
-    logging.info(f"files {files}")
+#     files = glob.glob("/home/huggingface/output/*.png")
+#     logging.info(f"files {files}")
 
-    upload_name = 'uploads/texure.png'
-    s3.upload_file(files[0], 'my-bucket', upload_name)
+#     upload_name = 'uploads/texure.png'
+#     s3.upload_file(files[0], 'my-bucket', upload_name)
 
-    status = 200
-    return flask.Response(response=upload_name, status=status, mimetype="application/json")
+#     status = 200
+#     return flask.Response(response=upload_name, status=status, mimetype="application/json")

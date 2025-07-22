@@ -1,9 +1,14 @@
 
-from app import app
+import threading
+from app import Consumer, app
+from waitress import serve
 
 
 def main():
-    from waitress import serve
+
+    conusmer = Consumer()
+
+    threading.Thread(target=conusmer.start, daemon=True).start()
 
     serve(app, host="0.0.0.0", port=8080)
 
