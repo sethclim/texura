@@ -25,5 +25,6 @@ require (
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/go-chi/chi/v5 v5.2.1 // indirect
 	github.com/go-chi/cors v1.2.1 // indirect
-	github.com/sethclim/texura/apps/texura_api v0.0.0-20250603233255-d4ed9382f1d1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 )

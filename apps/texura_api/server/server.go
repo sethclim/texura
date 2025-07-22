@@ -1,11 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,15 +13,24 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 
 	// s3presign "github.com/aws/aws-sdk-go-v2/service/s3/presign"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type InferenceRequest struct {
 	Prompt string `json:"prompt"`
+}
+
+type TaskMessage struct {
+	TaskID     string `json:"task_id"`
+	Prompt     string `json:"prompt"`
+	ImageScale int    `json:"image_scale"`
 }
 
 func CreatePresignURL(key string) string {
@@ -89,13 +96,40 @@ func Start() error {
 		MaxAge:           300,
 	}))
 
+	conn, err := amqp.Dial(os.Getenv("RABBIT_MQ_ADDRESS"))
+	if err != nil {
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Failed to open a channel: %v", err)
+	}
+	defer ch.Close()
+
+	// Declare the queue (same name the worker listens on)
+	_, err = ch.QueueDeclare(
+		"ml_task_queue", // name
+		true,            // durable
+		false,           // delete when unused
+		false,           // exclusive
+		false,           // no-wait
+		nil,             // arguments
+	)
+
+	if err != nil {
+		log.Fatalf("Failed to declare queue: %v", err)
+	}
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
+
 	r.Post("/inference", func(w http.ResponseWriter, r *http.Request) {
 		var inferReq InferenceRequest
 		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields() // catch unexpected fields
+		decoder.DisallowUnknownFields()
 
 		if err := decoder.Decode(&inferReq); err != nil {
 			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -104,50 +138,91 @@ func Start() error {
 
 		log.Printf("Received: %+v\n", inferReq)
 
-		url := os.Getenv("STABLE_DIFFUSION_SERVICE_URL")
+		// url := os.Getenv("STABLE_DIFFUSION_SERVICE_URL")
 
 		// Create your payload (as a struct or map)
-		payload := map[string]interface{}{
-			"image_scale": 1,
-			"prompt":      inferReq.Prompt,
+		// payload := map[string]interface{}{
+		// 	"image_scale": 1,
+		// 	"prompt":      inferReq.Prompt,
+		// }
+
+		taskID := uuid.New()
+		fmt.Println("Task ID:", taskID.String())
+
+		task := TaskMessage{
+			TaskID:     taskID.String(),
+			Prompt:     inferReq.Prompt,
+			ImageScale: 1,
 		}
 
 		// Encode the payload to JSON
-		jsonData, err := json.Marshal(payload)
+		jsonData, err := json.Marshal(task)
 		if err != nil {
 			log.Fatalf("JSON encoding failed: %v", err)
 		}
 
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err = ch.PublishWithContext(ctx,
+			"",              // exchange
+			"ml_task_queue", // routing key
+			false,           // mandatory
+			false,           // immediate
+			amqp.Publishing{
+				ContentType:  "application/json",
+				Body:         jsonData,
+				DeliveryMode: amqp.Persistent,
+			})
+
 		if err != nil {
-			fmt.Println("reqc create error:", err)
-			return
+			log.Fatalf("Failed to publish message: %v", err)
 		}
 
-		req.Header.Set("Content-Type", "application/json")
+		fmt.Printf(" [x] Sent task: %s\n", task.TaskID)
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			fmt.Println("req error:", err)
-			return
-		}
-		defer resp.Body.Close()
+		// req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		// if err != nil {
+		// 	fmt.Println("reqc create error:", err)
+		// 	return
+		// }
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Read error:", err)
-			return
-		}
-		fmt.Println("Response:", string(body))
+		// req.Header.Set("Content-Type", "application/json")
 
-		fmt.Println("Calling CreatePresignURL...")
-		presignURL := CreatePresignURL(string(body))
+		// client := &http.Client{}
+		// resp, err := client.Do(req)
+		// if err != nil {
+		// 	fmt.Println("req error:", err)
+		// 	return
+		// }
+		// defer resp.Body.Close()
 
-		fmt.Println("presignURL:", string(presignURL))
+		// body, err := io.ReadAll(resp.Body)
+		// if err != nil {
+		// 	fmt.Println("Read error:", err)
+		// 	return
+		// }
+		// fmt.Println("Response:", string(body))
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(string(presignURL)))
+		w.Write([]byte("Started"))
+
 	})
+
+	r.Get("/status", func(w http.ResponseWriter, r *http.Request) {
+
+		// status == in progress
+		// w.Write([]byte("OK"))
+
+		// if status == Finished
+		// fmt.Println("Calling CreatePresignURL...")
+		// presignURL := CreatePresignURL(string(body))
+
+		// fmt.Println("presignURL:", string(presignURL))
+
+		// w.Header().Set("Content-Type", "application/json")
+		// w.Write([]byte(string(presignURL)))
+		w.Write([]byte("OK"))
+	})
+
 	return http.ListenAndServe(":7070", r)
 }

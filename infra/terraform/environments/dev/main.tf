@@ -37,7 +37,8 @@ resource "helm_release" "nvidia_device_plugin" {
   chart      = "nvidia-device-plugin"
   version    = "0.15.0"
 
-  namespace = "kube-system"
+  namespace  = "kube-system"
+  depends_on = [null_resource.label_gpu_node]
 }
 
 
@@ -140,7 +141,7 @@ resource "kubernetes_deployment" "test-deploy" {
     }
   }
 
-  depends_on = [kubernetes_secret.minio_secret_in_app_ns]
+  depends_on = [null_resource.execute_python]
 
   spec {
     replicas = 1
@@ -177,6 +178,11 @@ resource "kubernetes_deployment" "test-deploy" {
           env {
             name  = "MINIO_ENDPOINT"
             value = "http://minio.block-storage.svc.cluster.local"
+          }
+
+          env {
+            name  = "RABBIT_MQ_ADDRESS"
+            value = "amqp://user:password@rabbitmq.rabbitmq:5672/"
           }
 
           env {
@@ -324,7 +330,7 @@ resource "kubernetes_deployment" "test-deploy2" {
     }
   }
 
-  depends_on = [kubernetes_secret.minio_secret_in_app_ns]
+  depends_on = [null_resource.execute_python]
 
   spec {
     replicas = 1
