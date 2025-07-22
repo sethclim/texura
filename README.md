@@ -24,6 +24,10 @@ AI game texture generation platform
 │           └── prod/         # IaC for production deployment
 ```
 
+## Architecture
+
+<img width="2096" height="1135" alt="Image" src="https://github.com/user-attachments/assets/aaaeb382-9c8c-4842-acf5-0b0b5484216a" />
+
 ## Dependencies and Tools
 
 ### Platform
