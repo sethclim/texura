@@ -1,6 +1,7 @@
 
 
 import glob
+import json
 import logging
 import os
 
@@ -68,26 +69,28 @@ s3 = boto3.client(
 
 
 def callback(ch, method, properties, body):
-    logging.info(f" [x] Received: {body.decode()}")
+    body_decoded = body.decode()
+    logging.info(f" [x] Received: {body_decoded}")
 
-    # try:
-    #     json_data = request.get_json()
-    #     logging.info(f"json_data {json_data}")
-    #     args = InferenceArgsModel(**json_data)
-    # except ValidationError as e:
-    #     return {"error": e.errors()}, 400
+    try:
+        json_data = json.loads(body.decode())
+        logging.info(f"json_data {json_data}")
+        args = InferenceArgsModel(**json_data)
+    except ValidationError as e:
+        logging.error(f"ValidationError {e}")
+        return {"error": e.errors()}, 400
     
-    # logging.info(args)
+    logging.info(args)
 
-    # pipeline = stable_diffusion_pipeline(args)
-    # stable_diffusion_inference(pipeline)
+    pipeline = stable_diffusion_pipeline(args)
+    stable_diffusion_inference(pipeline)
 
 
-    # files = glob.glob("/home/huggingface/output/*.png")
-    # logging.info(f"files {files}")
+    files = glob.glob("/home/huggingface/output/*.png")
+    logging.info(f"files {files}")
 
-    # upload_name = 'uploads/texure.png'
-    # s3.upload_file(files[0], 'my-bucket', upload_name)
+    upload_name = 'uploads/texure.png'
+    s3.upload_file(files[0], 'my-bucket', upload_name)
 
 
 
@@ -99,9 +102,6 @@ class Consumer:
         params = pika.URLParameters(os.environ.get("RABBIT_MQ_ADDRESS"))
         connection = pika.BlockingConnection(params)
         channel = connection.channel()
-
-        # # Make sure the queue exists
-        # channel.queue_declare(queue='ml_task_queue')
 
         # Set up subscription on the queue
         channel.basic_consume(queue='ml_task_queue', on_message_callback=callback, auto_ack=True)
