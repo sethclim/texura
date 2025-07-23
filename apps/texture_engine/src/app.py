@@ -93,7 +93,14 @@ async def handle_task(message: aio_pika.IncomingMessage):
     
     logging.info(args)
 
-    rdb.set(json_data['task_id'], IN_PROGRESS_STATUS)
+    # rdb.set(json_data['task_id'], IN_PROGRESS_STATUS)
+
+    task = {
+        "id": json_data['task_id'],
+        "status": IN_PROGRESS_STATUS
+    }
+
+    rdb.set(f"task:{json_data['task_id']}", json.dumps(task))
 
     pipeline =   await asyncio.to_thread(stable_diffusion_pipeline, args)
     await asyncio.to_thread(stable_diffusion_inference, pipeline)
@@ -104,7 +111,15 @@ async def handle_task(message: aio_pika.IncomingMessage):
     upload_name = 'uploads/texure.png'
     s3.upload_file(files[0], 'my-bucket', upload_name)
 
-    rdb.set(json_data['task_id'], COMPLETED_STATUS)
+    # rdb.set(json_data['task_id'], COMPLETED_STATUS)
+
+    task = {
+        "id": json_data['task_id'],
+        "status": COMPLETED_STATUS,
+        "upload_path": upload_name
+    }
+
+    rdb.set(f"task:{json_data['task_id']}", json.dumps(task))
 
 async def consume():
     while True:

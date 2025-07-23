@@ -34,6 +34,12 @@ type TaskMessage struct {
 	ImageScale int    `json:"image_scale"`
 }
 
+type Task struct {
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	UploadPath string `json:"upload_path"`
+}
+
 var ctx1 = context.Background()
 
 func CreatePresignURL(key string) string {
@@ -82,6 +88,29 @@ func CreatePresignURL(key string) string {
 	fmt.Println("Presigned URL:", presigned.URL)
 
 	return presigned.URL
+}
+
+func saveTask(rdb *redis.Client, task Task) error {
+	data, err := json.Marshal(task)
+	if err != nil {
+		return err
+	}
+
+	return rdb.Set(ctx1, "task:"+task.ID, data, 0).Err()
+}
+
+func getTask(rdb *redis.Client, taskID string) (*Task, error) {
+	val, err := rdb.Get(ctx1, "task:"+taskID).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var task Task
+	if err := json.Unmarshal([]byte(val), &task); err != nil {
+		return nil, err
+	}
+
+	return &task, nil
 }
 
 func Start() error {
@@ -158,19 +187,21 @@ func Start() error {
 
 		status := "started"
 
-		err := rdb.Set(ctx1, taskID.String(), status, 0).Err()
-		if err != nil {
-			log.Fatalf("Failed to set task status: %v", err)
-		}
+		// err := rdb.Set(ctx1, taskID.String(), status, 0).Err()
+		// if err != nil {
+		// 	log.Fatalf("Failed to set task status: %v", err)
+		// }
+		task := Task{ID: taskID.String(), Status: status}
+		saveTask(rdb, task)
 
-		task := TaskMessage{
+		task_msg := TaskMessage{
 			TaskID:     taskID.String(),
 			Prompt:     inferReq.Prompt,
 			ImageScale: 1,
 		}
 
 		// Encode the payload to JSON
-		jsonData, err := json.Marshal(task)
+		jsonData, err := json.Marshal(task_msg)
 		if err != nil {
 			log.Fatalf("JSON encoding failed: %v", err)
 		}
@@ -193,7 +224,7 @@ func Start() error {
 			log.Fatalf("Failed to publish message: %v", err)
 		}
 
-		fmt.Printf(" [x] Sent task: %s\n", task.TaskID)
+		fmt.Printf(" [x] Sent task: %s\n", task.ID)
 
 		// req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 		// if err != nil {
@@ -218,7 +249,7 @@ func Start() error {
 		// }
 		// fmt.Println("Response:", string(body))
 
-		msg := fmt.Sprintf("started: %s\n", task.TaskID)
+		msg := fmt.Sprintf("started: %s\n", task.ID)
 
 		w.Write([]byte(msg))
 
@@ -228,26 +259,32 @@ func Start() error {
 
 		taskID := chi.URLParam(r, "taskID")
 
-		val, err := rdb.Get(ctx1, taskID).Result()
+		t, err := getTask(rdb, taskID)
+
 		if err != nil {
-			log.Fatalf("Failed to get task status: %v", err)
+			// Handle the error (e.g., log or return HTTP 404)
+			log.Printf("Failed to get task status: %v", err)
+			http.Error(w, "Task not found", http.StatusNotFound)
+			w.Write([]byte("Error getting Status"))
 		}
-		if val == "started" {
+
+		if t.Status == "started" {
 			w.Write([]byte("STARTED"))
-		} else if val == "in_progress" {
+		} else if t.Status == "in_progress" {
 			w.Write([]byte("IN_PROGRESS"))
-		} else if val == "completed" {
-			// fmt.Println("Calling CreatePresignURL...")
-			// presignURL := CreatePresignURL(string(body))
+		} else if t.Status == "completed" && t.UploadPath != "" {
+			fmt.Println("Calling CreatePresignURL...")
+			presignURL := CreatePresignURL(string(t.UploadPath))
 
-			// fmt.Println("presignURL:", string(presignURL))
+			fmt.Println("presignURL:", string(presignURL))
 
-			// w.Header().Set("Content-Type", "application/json")
-			// w.Write([]byte(string(presignURL)))
-			w.Write([]byte("FINISHED"))
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(string(presignURL)))
+			// w.Write([]byte("FINISHED"))
+		} else {
+			w.Write([]byte("Unknown Status"))
 		}
 
-		w.Write([]byte("Unknown Status"))
 	})
 
 	return http.ListenAndServe(":7070", r)
