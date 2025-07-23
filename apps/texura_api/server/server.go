@@ -218,24 +218,36 @@ func Start() error {
 		// }
 		// fmt.Println("Response:", string(body))
 
-		w.Write([]byte("Started"))
+		msg := fmt.Sprintf("started: %s\n", task.TaskID)
+
+		w.Write([]byte(msg))
 
 	})
 
-	r.Get("/status", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/status/{taskID}", func(w http.ResponseWriter, r *http.Request) {
 
-		// status == in progress
-		// w.Write([]byte("OK"))
+		taskID := chi.URLParam(r, "taskID")
 
-		// if status == Finished
-		// fmt.Println("Calling CreatePresignURL...")
-		// presignURL := CreatePresignURL(string(body))
+		val, err := rdb.Get(ctx1, taskID).Result()
+		if err != nil {
+			log.Fatalf("Failed to get task status: %v", err)
+		}
+		if val == "started" {
+			w.Write([]byte("STARTED"))
+		} else if val == "in_progress" {
+			w.Write([]byte("IN_PROGRESS"))
+		} else if val == "completed" {
+			// fmt.Println("Calling CreatePresignURL...")
+			// presignURL := CreatePresignURL(string(body))
 
-		// fmt.Println("presignURL:", string(presignURL))
+			// fmt.Println("presignURL:", string(presignURL))
 
-		// w.Header().Set("Content-Type", "application/json")
-		// w.Write([]byte(string(presignURL)))
-		w.Write([]byte("OK"))
+			// w.Header().Set("Content-Type", "application/json")
+			// w.Write([]byte(string(presignURL)))
+			w.Write([]byte("FINISHED"))
+		}
+
+		w.Write([]byte("Unknown Status"))
 	})
 
 	return http.ListenAndServe(":7070", r)
