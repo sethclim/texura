@@ -1,28 +1,31 @@
-
-
+import os
 import glob
 import json
+import torch
 import logging
-import os
 
 import boto3
 from botocore.client import Config
-from requests import request
+
 from stable_diffusion import stable_diffusion_inference, stable_diffusion_pipeline
-import flask
-from flask import request, jsonify, Response
 
 from pydantic import BaseModel, ValidationError, PrivateAttr
 from typing import Optional
-import torch
 
-import pika
+import asyncio
+from fastapi import FastAPI
+import aio_pika
+from aio_pika import connect_robust
+
+app = FastAPI()
+loop = asyncio.get_event_loop()
+
 
 logging.basicConfig(level=logging.INFO, force=True)
-app = flask.Flask(__name__)
+# app = flask.Flask(__name__)
 
-print(torch.version.cuda) 
-print(torch.cuda.is_available())   
+print(f"torch cuda version {torch.version.cuda}") 
+print(f"cuda is_available:  {torch.cuda.is_available()}")   
 
 class InferenceArgsModel(BaseModel):
     attention_slicing : bool = False
@@ -55,8 +58,6 @@ class InferenceArgsModel(BaseModel):
     _generator : any = PrivateAttr(default="")
     _scheduler : any = PrivateAttr(default=None)
 
-
-
 s3 = boto3.client(
     's3',
     endpoint_url=os.environ['MINIO_ENDPOINT'],
@@ -66,14 +67,17 @@ s3 = boto3.client(
     region_name=os.environ['MINIO_REGION'],
 )
 
+@app.get("/ping")
+def ping():
+    """Determine if the container is working and healthy."""
+    return {"status": "ok"}
 
-
-def callback(ch, method, properties, body):
-    body_decoded = body.decode()
+async def handle_task(message: aio_pika.IncomingMessage):
+    body_decoded = message.body.decode()
     logging.info(f" [x] Received: {body_decoded}")
 
     try:
-        json_data = json.loads(body.decode())
+        json_data = json.loads(body_decoded)
         logging.info(f"json_data {json_data}")
         args = InferenceArgsModel(**json_data)
     except ValidationError as e:
@@ -82,9 +86,8 @@ def callback(ch, method, properties, body):
     
     logging.info(args)
 
-    pipeline = stable_diffusion_pipeline(args)
-    stable_diffusion_inference(pipeline)
-
+    pipeline =   await asyncio.to_thread(stable_diffusion_pipeline, args)
+    await asyncio.to_thread(stable_diffusion_inference, pipeline)
 
     files = glob.glob("/home/huggingface/output/*.png")
     logging.info(f"files {files}")
@@ -92,59 +95,23 @@ def callback(ch, method, properties, body):
     upload_name = 'uploads/texure.png'
     s3.upload_file(files[0], 'my-bucket', upload_name)
 
+async def consume():
+    while True:
+        try:
+            # Connect to RabbitMQ server (localhost by default)
+            logging.info(f'RABBIT_MQ_ADDRESS ={os.environ.get("RABBIT_MQ_ADDRESS")}')
+            connection = await connect_robust(os.environ.get("RABBIT_MQ_ADDRESS"))
+            channel = await connection.channel()
+            await channel.set_qos(prefetch_count=1)
+            queue = await channel.get_queue('ml_task_queue', ensure=False)
 
+            async with queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    async with message.process():
+                        await handle_task(message)
 
-class Consumer:
-
-    def start(self):
-        # Connect to RabbitMQ server (localhost by default)
-        logging.info("RABBIT_MQ_ADDRESS =", os.environ.get("RABBIT_MQ_ADDRESS"))
-        params = pika.URLParameters(os.environ.get("RABBIT_MQ_ADDRESS"))
-        connection = pika.BlockingConnection(params)
-        channel = connection.channel()
-
-        # Set up subscription on the queue
-        channel.basic_consume(queue='ml_task_queue', on_message_callback=callback, auto_ack=True)
-
-        logging.info(' [*] Waiting for messages. To exit press CTRL+C')
-        channel.start_consuming()
-
-
-@app.route("/ping", methods=["GET"])
-def ping():
-    """Determine if the container is working and healthy."""
-    health = (
-        500
-        # ScoringService.get_model() is not None
-        # You can insert a health check here
-    )
-
-    status = 200 if health else 404
-    return flask.Response(response="\n", status=status, mimetype="application/json")
-
-
-# @app.route("/invocations", methods=["POST"])
-# def invoke():
-#     logging.info("invoke...")
-
-#     try:
-#         json_data = request.get_json()
-#         logging.info(f"json_data {json_data}")
-#         args = InferenceArgsModel(**json_data)
-#     except ValidationError as e:
-#         return {"error": e.errors()}, 400
-    
-#     logging.info(args)
-
-#     pipeline = stable_diffusion_pipeline(args)
-#     stable_diffusion_inference(pipeline)
-
-
-#     files = glob.glob("/home/huggingface/output/*.png")
-#     logging.info(f"files {files}")
-
-#     upload_name = 'uploads/texure.png'
-#     s3.upload_file(files[0], 'my-bucket', upload_name)
-
-#     status = 200
-#     return flask.Response(response=upload_name, status=status, mimetype="application/json")
+        except Exception as e:
+            logging.error(f"Connection or consume error: {e}")
+            logging.info("Reconnecting in 5 seconds...")
+            await asyncio.sleep(5)  # backoff before retry
+            

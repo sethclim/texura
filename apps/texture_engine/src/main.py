@@ -1,17 +1,20 @@
 
-import threading
-from app import Consumer, app
-from waitress import serve
+import asyncio
+import uvicorn
 
+from app import app, consume
 
-def main():
+async def main():
+    # threading.Thread(target=conusmer.start, daemon=True).start()
+    # serve(app, host="0.0.0.0", port=8080)
 
-    conusmer = Consumer()
+    task1 = asyncio.create_task(consume())
+    config = uvicorn.Config(app, host="0.0.0.0", port=8080)
+    server = uvicorn.Server(config)
+    task2 = asyncio.create_task(server.serve())
 
-    threading.Thread(target=conusmer.start, daemon=True).start()
-
-    serve(app, host="0.0.0.0", port=8080)
+    await asyncio.gather(task1, task2)
 
 
 if __name__ == "__main__":
-    main()
+  asyncio.run(main())

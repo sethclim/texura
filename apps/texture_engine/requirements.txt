@@ -7,8 +7,8 @@ transformers
 xformers==0.0.22.post7
 
 #server
-flask
-waitress
 pydantic
 boto3
-pika
+fastapi 
+aio_pika 
+uvicorn
