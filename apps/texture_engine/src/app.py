@@ -17,6 +17,8 @@ from fastapi import FastAPI
 import aio_pika
 from aio_pika import connect_robust
 
+import redis
+
 app = FastAPI()
 loop = asyncio.get_event_loop()
 
@@ -67,6 +69,11 @@ s3 = boto3.client(
     region_name=os.environ['MINIO_REGION'],
 )
 
+rdb = redis.Redis(host=os.environ['REDIS_HOST'], port=6379, decode_responses=True)
+
+COMPLETED_STATUS = "completed"
+IN_PROGRESS_STATUS = "in_progress"
+
 @app.get("/ping")
 def ping():
     """Determine if the container is working and healthy."""
@@ -86,6 +93,8 @@ async def handle_task(message: aio_pika.IncomingMessage):
     
     logging.info(args)
 
+    rdb.set(json_data['task_id'], IN_PROGRESS_STATUS)
+
     pipeline =   await asyncio.to_thread(stable_diffusion_pipeline, args)
     await asyncio.to_thread(stable_diffusion_inference, pipeline)
 
@@ -94,6 +103,8 @@ async def handle_task(message: aio_pika.IncomingMessage):
 
     upload_name = 'uploads/texure.png'
     s3.upload_file(files[0], 'my-bucket', upload_name)
+
+    rdb.set(json_data['task_id'], COMPLETED_STATUS)
 
 async def consume():
     while True:

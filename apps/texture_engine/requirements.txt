@@ -12,3 +12,5 @@ boto3
 fastapi 
 aio_pika 
 uvicorn
+
+redis
