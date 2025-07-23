@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/cors"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 )
 
 type InferenceRequest struct {
@@ -32,6 +33,8 @@ type TaskMessage struct {
 	Prompt     string `json:"prompt"`
 	ImageScale int    `json:"image_scale"`
 }
+
+var ctx1 = context.Background()
 
 func CreatePresignURL(key string) string {
 	fmt.Println("CreatePresignURL:", key)
@@ -85,6 +88,10 @@ func Start() error {
 	r := chi.NewRouter()
 
 	fe_url := os.Getenv("FRONTEND_URL")
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: os.Getenv("REDIS_ADDRESS"),
+	})
 
 	// CORS middleware
 	r.Use(cors.Handler(cors.Options{
@@ -148,6 +155,13 @@ func Start() error {
 
 		taskID := uuid.New()
 		fmt.Println("Task ID:", taskID.String())
+
+		status := "started"
+
+		err := rdb.Set(ctx1, taskID.String(), status, 0).Err()
+		if err != nil {
+			log.Fatalf("Failed to set task status: %v", err)
+		}
 
 		task := TaskMessage{
 			TaskID:     taskID.String(),
