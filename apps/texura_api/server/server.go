@@ -249,15 +249,20 @@ func Start() error {
 		// }
 		// fmt.Println("Response:", string(body))
 
-		msg := fmt.Sprintf("started: %s\n", task.ID)
+		response := Task{
+			ID:     task.ID,
+			Status: "started",
+		}
 
-		w.Write([]byte(msg))
-
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
 	})
 
 	r.Get("/status/{taskID}", func(w http.ResponseWriter, r *http.Request) {
 
 		taskID := chi.URLParam(r, "taskID")
+
+		fmt.Println("status request for:", taskID)
 
 		t, err := getTask(rdb, taskID)
 
@@ -268,22 +273,27 @@ func Start() error {
 			w.Write([]byte("Error getting Status"))
 		}
 
-		if t.Status == "started" {
-			w.Write([]byte("STARTED"))
-		} else if t.Status == "in_progress" {
-			w.Write([]byte("IN_PROGRESS"))
-		} else if t.Status == "completed" && t.UploadPath != "" {
+		response := Task{
+			ID:     taskID,
+			Status: t.Status,
+		}
+
+		if t.Status == "completed" && t.UploadPath != "" {
 			fmt.Println("Calling CreatePresignURL...")
 			presignURL := CreatePresignURL(string(t.UploadPath))
 
 			fmt.Println("presignURL:", string(presignURL))
 
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(string(presignURL)))
+			// w.Header().Set("Content-Type", "application/json")
+			// w.Write([]byte(string(presignURL)))
+
+			response.Status = "finished"
+			response.UploadPath = presignURL
 			// w.Write([]byte("FINISHED"))
-		} else {
-			w.Write([]byte("Unknown Status"))
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
 
 	})
 
