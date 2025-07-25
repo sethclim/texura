@@ -6,6 +6,9 @@ resource "minikube_cluster" "docker" {
   driver       = "docker"
   cluster_name = "texura-dev"
 
+  cpus   = 8
+  memory = 20480
+
   addons = [
     "default-storageclass",
     "storage-provisioner",
@@ -186,6 +189,11 @@ resource "kubernetes_deployment" "test-deploy" {
           }
 
           env {
+            name  = "REDIS_ADDRESS"
+            value = "redis-master:6379"
+          }
+
+          env {
             name = "AWS_ACCESS_KEY_ID"
             value_from {
               secret_key_ref {
@@ -212,12 +220,12 @@ resource "kubernetes_deployment" "test-deploy" {
 
           resources {
             limits = {
-              cpu    = "0.5"
-              memory = "512Mi"
+              cpu    = "1"
+              memory = "1Gi"
             }
             requests = {
               cpu    = "250m"
-              memory = "50Mi"
+              memory = "256Mi"
             }
           }
 
@@ -375,6 +383,11 @@ resource "kubernetes_deployment" "test-deploy2" {
           }
 
           env {
+            name  = "REDIS_HOST"
+            value = "redis-master"
+          }
+
+          env {
             name = "AWS_SECRET_ACCESS_KEY"
             value_from {
               secret_key_ref {
@@ -391,13 +404,13 @@ resource "kubernetes_deployment" "test-deploy2" {
 
           resources {
             limits = {
-              cpu              = "1.0"
-              memory           = "5Gi"
+              cpu              = "2"
+              memory           = "8Gi"
               "nvidia.com/gpu" = "1"
             }
             requests = {
-              cpu              = "500m"
-              memory           = "5Gi"
+              cpu              = "2"
+              memory           = "8Gi"
               "nvidia.com/gpu" = "1"
             }
           }
