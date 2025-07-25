@@ -69,6 +69,11 @@ resource "kubernetes_stateful_set" "rabbitmq" {
             name       = "config-volume"
           }
 
+          volume_mount {
+            name       = "rabbitmq-data"
+            mount_path = "/var/lib/rabbitmq"
+          }
+
           env {
             name  = "RABBITMQ_ERLANG_COOKIE"
             value = random_password.erlang_cookie.result
