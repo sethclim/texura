@@ -14,3 +14,5 @@ aio_pika
 uvicorn
 
 redis
+
+aiobotocore

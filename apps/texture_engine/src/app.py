@@ -79,6 +79,20 @@ def ping():
     """Determine if the container is working and healthy."""
     return {"status": "ok"}
 
+import aiobotocore.session
+
+async def upload_to_s3(bucket, file, endpoint_url, region_name, aws_secret_access_key, aws_access_key_id):
+    session = aiobotocore.session.get_session()
+    async with session.create_client(
+        "s3",
+        region_name=region_name,
+        endpoint_url=endpoint_url,  # Replace with your MinIO endpoint
+        aws_secret_access_key=aws_secret_access_key,
+        aws_access_key_id=aws_access_key_id
+    ) as s3_client:
+        with open(file, "rb") as f:
+            await s3_client.put_object(Bucket=bucket, Key="uploads/texture.png", Body=f)
+
 async def handle_task(message: aio_pika.IncomingMessage):
     body_decoded = message.body.decode()
     logging.info(f" [x] Received: {body_decoded}")
@@ -108,8 +122,26 @@ async def handle_task(message: aio_pika.IncomingMessage):
     files = glob.glob("/home/huggingface/output/*.png")
     logging.info(f"files {files}")
 
-    upload_name = 'uploads/texure.png'
-    s3.upload_file(files[0], 'my-bucket', upload_name)
+    upload_name = 'uploads/texture.png'
+
+    logging.info("Preparing to upload to S3")
+
+    await upload_to_s3(
+        'my-bucket', 
+        files[0], 
+        os.environ['MINIO_ENDPOINT'], 
+        os.environ['MINIO_REGION'],   
+        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']
+    )
+
+    # try:
+    #     s3.upload_fileobj("texure.png", 'my-bucket', upload_name)
+    #     logging.info("Upload successful")
+    # except Exception as e:
+    #     logging.exception(f"Upload failed: {e}")
+
+    logging.info(f"Upload Finished")
 
     # rdb.set(json_data['task_id'], COMPLETED_STATUS)
 
@@ -120,6 +152,8 @@ async def handle_task(message: aio_pika.IncomingMessage):
     }
 
     rdb.set(f"task:{json_data['task_id']}", json.dumps(task))
+
+    logging.info(f"status saved")
 
 async def consume():
     while True:
