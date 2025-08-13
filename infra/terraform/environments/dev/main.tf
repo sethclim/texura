@@ -6,6 +6,9 @@ resource "minikube_cluster" "docker" {
   driver       = "docker"
   cluster_name = "texura-dev"
 
+  cpus   = 12
+  memory = 24576
+
   addons = [
     "default-storageclass",
     "storage-provisioner",
@@ -31,13 +34,21 @@ resource "null_resource" "label_gpu_node" {
   depends_on = [minikube_cluster.docker]
 }
 
+data "external" "minikube_ip" {
+  working_dir = "${path.module}/../../../scripts/"
+  program     = ["python3", "get_minikube_ip.py"]
+  depends_on  = [minikube_cluster.docker]
+}
+
+
 resource "helm_release" "nvidia_device_plugin" {
   name       = "nvidia-device-plugin"
   repository = "https://nvidia.github.io/k8s-device-plugin"
   chart      = "nvidia-device-plugin"
   version    = "0.15.0"
 
-  namespace = "kube-system"
+  namespace  = "kube-system"
+  depends_on = [null_resource.label_gpu_node]
 }
 
 
@@ -116,19 +127,19 @@ resource "null_resource" "execute_python" {
 # #   }
 # # }
 
-resource "kubernetes_secret" "minio_secret_in_app_ns" {
-  metadata {
-    name      = "minio-secret"
-    namespace = "default" # Replace with your app's namespace
-  }
+# resource "kubernetes_secret" "minio_secret_in_app_ns" {
+#   metadata {
+#     name      = "minio-secret"
+#     namespace = "default" # Replace with your app's namespace
+#   }
 
-  data = {
-    accesskey = "admin"
-    secretkey = random_password.minio.result
-  }
+#   data = {
+#     accesskey = "admin"
+#     secretkey = random_password.minio.result
+#   }
 
-  type = "Opaque"
-}
+#   type = "Opaque"
+# }
 
 
 
@@ -140,7 +151,7 @@ resource "kubernetes_deployment" "test-deploy" {
     }
   }
 
-  depends_on = [kubernetes_secret.minio_secret_in_app_ns]
+  depends_on = [null_resource.execute_python]
 
   spec {
     replicas = 1
@@ -176,27 +187,17 @@ resource "kubernetes_deployment" "test-deploy" {
 
           env {
             name  = "MINIO_ENDPOINT"
-            value = "http://minio.block-storage.svc.cluster.local"
+            value = "http://minio.local"
           }
 
           env {
-            name = "AWS_ACCESS_KEY_ID"
-            value_from {
-              secret_key_ref {
-                name = "minio-secret"
-                key  = "accesskey"
-              }
-            }
+            name  = "AWS_ACCESS_KEY_ID"
+            value = "minio"
           }
 
           env {
-            name = "AWS_SECRET_ACCESS_KEY"
-            value_from {
-              secret_key_ref {
-                name = "minio-secret"
-                key  = "secretkey"
-              }
-            }
+            name  = "AWS_SECRET_ACCESS_KEY"
+            value = "minio123"
           }
 
           env {
@@ -204,14 +205,31 @@ resource "kubernetes_deployment" "test-deploy" {
             value = "us-east-1"
           }
 
+
+          env {
+            name  = "BUCKET"
+            value = "my-bucket"
+          }
+
+
+          env {
+            name  = "RABBIT_MQ_ADDRESS"
+            value = "amqp://user:password@rabbitmq.rabbitmq:5672/"
+          }
+
+          env {
+            name  = "REDIS_ADDRESS"
+            value = "redis-master:6379"
+          }
+
           resources {
             limits = {
-              cpu    = "0.5"
-              memory = "512Mi"
+              cpu    = "1"
+              memory = "1Gi"
             }
             requests = {
               cpu    = "250m"
-              memory = "50Mi"
+              memory = "256Mi"
             }
           }
 
@@ -281,15 +299,42 @@ resource "kubernetes_service" "texura_api_nodeport" {
 resource "kubernetes_ingress_v1" "example" {
   metadata {
     name = "example-ingress"
+
+    # Remove the rewrite annotation since no path rewriting is needed
     annotations = {
-      "nginx.ingress.kubernetes.io/rewrite-target" = "/"
+      # "nginx.ingress.kubernetes.io/rewrite-target" = "/$2"  <-- REMOVE THIS
+      "nginx.ingress.kubernetes.io/proxy-body-size" = "0"
     }
   }
 
   spec {
     ingress_class_name = "nginx"
 
+    # MinIO at host minio.local
     rule {
+      host = "minio.local"
+
+      http {
+        path {
+          path      = "/"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "minio"
+              port {
+                number = 9000
+              }
+            }
+          }
+        }
+      }
+    }
+
+    # App at host app.local
+    rule {
+      host = "app.local"
+
       http {
         path {
           path      = "/"
@@ -309,6 +354,8 @@ resource "kubernetes_ingress_v1" "example" {
   }
 }
 
+
+
 resource "null_resource" "patch_ingress_nginx" {
   depends_on = [kubernetes_ingress_v1.example]
   provisioner "local-exec" {
@@ -324,7 +371,7 @@ resource "kubernetes_deployment" "test-deploy2" {
     }
   }
 
-  depends_on = [kubernetes_secret.minio_secret_in_app_ns]
+  depends_on = [null_resource.execute_python]
 
   spec {
     replicas = 1
@@ -355,22 +402,18 @@ resource "kubernetes_deployment" "test-deploy2" {
 
           env {
             name  = "MINIO_ENDPOINT"
-            value = "http://minio.block-storage.svc.cluster.local"
+            value = "http://minio.default.svc.cluster.local:9000"
           }
 
           env {
             name  = "AWS_ACCESS_KEY_ID"
-            value = "admin"
+            value = "minio"
           }
 
+
           env {
-            name = "AWS_SECRET_ACCESS_KEY"
-            value_from {
-              secret_key_ref {
-                name = "minio-secret"
-                key  = "secretkey"
-              }
-            }
+            name  = "AWS_SECRET_ACCESS_KEY"
+            value = "minio123"
           }
 
           env {
@@ -378,17 +421,28 @@ resource "kubernetes_deployment" "test-deploy2" {
             value = "us-east-1"
           }
 
+          env {
+            name  = "RABBIT_MQ_ADDRESS"
+            value = "amqp://user:password@rabbitmq.rabbitmq:5672/"
+          }
+
+          env {
+            name  = "REDIS_HOST"
+            value = "redis-master"
+          }
+
           resources {
             limits = {
-              cpu              = "1.0"
-              memory           = "5Gi"
+              cpu              = "6"    # Use up to 6 cores
+              memory           = "16Gi" # Max 16 GiB usage
               "nvidia.com/gpu" = "1"
             }
             requests = {
-              cpu              = "500m"
-              memory           = "5Gi"
+              cpu              = "4"    # Scheduler reserves 4 cores
+              memory           = "10Gi" # Usually needs ~10 GiB
               "nvidia.com/gpu" = "1"
             }
+
           }
 
           liveness_probe {

@@ -17,3 +17,7 @@
 # output "kubeconfig" {
 #   value = kind_cluster.this.kubeconfig
 # }
+
+output "minikube_ip" {
+  value = data.external.minikube_ip.result["ip"]
+}

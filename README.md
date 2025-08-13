@@ -24,25 +24,17 @@ AI game texture generation platform
 │           └── prod/         # IaC for production deployment
 ```
 
-## Dependencies and Tools
+## Architecture
 
-### Platform
+<img width="2096" height="1135" alt="Image" src="https://github.com/user-attachments/assets/aaaeb382-9c8c-4842-acf5-0b0b5484216a" />
 
--   [Kubernetes](https://kubernetes.io/)
--   [TerraForm](https://developer.hashicorp.com/terraform/)
--   [Docker](https://www.docker.com/)
+## Tech Stack
 
-### Backend Services
-
--   [GO](https://go.dev/)
--   [Python](https://www.python.org/)
--   [Stable Diffusion](https://stability.ai/)
--   [MinIO](https://min.io/) (local S3)
-
-### Frontend
-
--   [React](https://react.dev/)
--   [TanStack Query](https://tanstack.com/query/latest)
+| Category     | Tools/Technologies                                                                                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Platform** | [Kubernetes](https://kubernetes.io/), [Terraform](https://developer.hashicorp.com/terraform/), [Docker](https://www.docker.com/)                                                                            |
+| **Backend**  | [Go](https://go.dev/), [Python](https://www.python.org/), [Stable Diffusion](https://stability.ai/), [MinIO](https://min.io/) (local S3), [RabbitMQ](https://www.rabbitmq.com/), [Redis](https://redis.io/) |
+| **Frontend** | [React](https://react.dev/), [TanStack Query](https://tanstack.com/query/latest)                                                                                                                            |
 
 ## Local Development
 
@@ -52,7 +44,7 @@ AI game texture generation platform
 docker compose up
 ```
 
-### Local KinD Cluster
+### Local Minikube Cluster
 
 install docker [docs.docker.com/desktop/setup/install/linux/](https://docs.docker.com/desktop/setup/install/linux/)
 
@@ -62,14 +54,24 @@ docker --version
 
 install terraform [developer.hashicorp.com/terraform/install](https://developer.hashicorp.com/terraform/install)
 
+```bash
+cd ./infra/terraform/environments/dev/
 ```
+
+```bash
 terraform --version
 ```
 
-```
+```bash
 terraform init
 ```
 
-```
+```bash
 terraform apply
+```
+
+Access ingress though tunnel (launch in own terminal)
+
+```bash
+minikube tunnel --profile texura-dev
 ```

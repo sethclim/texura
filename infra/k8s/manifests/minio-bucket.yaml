@@ -14,7 +14,7 @@ spec:
                       - s3api
                       - create-bucket
                       - --bucket
-                      - postgres
+                      - my-bucket
                       - --endpoint-url
                       - http://minio:80
                   env:

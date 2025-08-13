@@ -1,11 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,16 +13,34 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 
 	// s3presign "github.com/aws/aws-sdk-go-v2/service/s3/presign"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 )
 
 type InferenceRequest struct {
 	Prompt string `json:"prompt"`
 }
+
+type TaskMessage struct {
+	TaskID     string `json:"task_id"`
+	Prompt     string `json:"prompt"`
+	ImageScale int    `json:"image_scale"`
+}
+
+type Task struct {
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	UploadPath string `json:"upload_path"`
+}
+
+var ctx1 = context.Background()
 
 func CreatePresignURL(key string) string {
 	fmt.Println("CreatePresignURL:", key)
@@ -74,10 +90,37 @@ func CreatePresignURL(key string) string {
 	return presigned.URL
 }
 
+func saveTask(rdb *redis.Client, task Task) error {
+	data, err := json.Marshal(task)
+	if err != nil {
+		return err
+	}
+
+	return rdb.Set(ctx1, "task:"+task.ID, data, 0).Err()
+}
+
+func getTask(rdb *redis.Client, taskID string) (*Task, error) {
+	val, err := rdb.Get(ctx1, "task:"+taskID).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var task Task
+	if err := json.Unmarshal([]byte(val), &task); err != nil {
+		return nil, err
+	}
+
+	return &task, nil
+}
+
 func Start() error {
 	r := chi.NewRouter()
 
 	fe_url := os.Getenv("FRONTEND_URL")
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: os.Getenv("REDIS_ADDRESS"),
+	})
 
 	// CORS middleware
 	r.Use(cors.Handler(cors.Options{
@@ -89,13 +132,40 @@ func Start() error {
 		MaxAge:           300,
 	}))
 
+	conn, err := amqp.Dial(os.Getenv("RABBIT_MQ_ADDRESS"))
+	if err != nil {
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Failed to open a channel: %v", err)
+	}
+	defer ch.Close()
+
+	// Declare the queue (same name the worker listens on)
+	_, err = ch.QueueDeclare(
+		"ml_task_queue", // name
+		true,            // durable
+		false,           // delete when unused
+		false,           // exclusive
+		false,           // no-wait
+		nil,             // arguments
+	)
+
+	if err != nil {
+		log.Fatalf("Failed to declare queue: %v", err)
+	}
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
+
 	r.Post("/inference", func(w http.ResponseWriter, r *http.Request) {
 		var inferReq InferenceRequest
 		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields() // catch unexpected fields
+		decoder.DisallowUnknownFields()
 
 		if err := decoder.Decode(&inferReq); err != nil {
 			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -104,50 +174,128 @@ func Start() error {
 
 		log.Printf("Received: %+v\n", inferReq)
 
-		url := os.Getenv("STABLE_DIFFUSION_SERVICE_URL")
+		// url := os.Getenv("STABLE_DIFFUSION_SERVICE_URL")
 
 		// Create your payload (as a struct or map)
-		payload := map[string]interface{}{
-			"image_scale": 1,
-			"prompt":      inferReq.Prompt,
+		// payload := map[string]interface{}{
+		// 	"image_scale": 1,
+		// 	"prompt":      inferReq.Prompt,
+		// }
+
+		taskID := uuid.New()
+		fmt.Println("Task ID:", taskID.String())
+
+		status := "started"
+
+		// err := rdb.Set(ctx1, taskID.String(), status, 0).Err()
+		// if err != nil {
+		// 	log.Fatalf("Failed to set task status: %v", err)
+		// }
+		task := Task{ID: taskID.String(), Status: status}
+		saveTask(rdb, task)
+
+		task_msg := TaskMessage{
+			TaskID:     taskID.String(),
+			Prompt:     inferReq.Prompt,
+			ImageScale: 1,
 		}
 
 		// Encode the payload to JSON
-		jsonData, err := json.Marshal(payload)
+		jsonData, err := json.Marshal(task_msg)
 		if err != nil {
 			log.Fatalf("JSON encoding failed: %v", err)
 		}
 
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err = ch.PublishWithContext(ctx,
+			"",              // exchange
+			"ml_task_queue", // routing key
+			false,           // mandatory
+			false,           // immediate
+			amqp.Publishing{
+				ContentType:  "application/json",
+				Body:         jsonData,
+				DeliveryMode: amqp.Persistent,
+			})
+
 		if err != nil {
-			fmt.Println("reqc create error:", err)
-			return
+			log.Fatalf("Failed to publish message: %v", err)
 		}
 
-		req.Header.Set("Content-Type", "application/json")
+		fmt.Printf(" [x] Sent task: %s\n", task.ID)
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			fmt.Println("req error:", err)
-			return
+		// req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		// if err != nil {
+		// 	fmt.Println("reqc create error:", err)
+		// 	return
+		// }
+
+		// req.Header.Set("Content-Type", "application/json")
+
+		// client := &http.Client{}
+		// resp, err := client.Do(req)
+		// if err != nil {
+		// 	fmt.Println("req error:", err)
+		// 	return
+		// }
+		// defer resp.Body.Close()
+
+		// body, err := io.ReadAll(resp.Body)
+		// if err != nil {
+		// 	fmt.Println("Read error:", err)
+		// 	return
+		// }
+		// fmt.Println("Response:", string(body))
+
+		response := Task{
+			ID:     task.ID,
+			Status: "started",
 		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Read error:", err)
-			return
-		}
-		fmt.Println("Response:", string(body))
-
-		fmt.Println("Calling CreatePresignURL...")
-		presignURL := CreatePresignURL(string(body))
-
-		fmt.Println("presignURL:", string(presignURL))
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(string(presignURL)))
+		json.NewEncoder(w).Encode(response)
 	})
+
+	r.Get("/status/{taskID}", func(w http.ResponseWriter, r *http.Request) {
+
+		taskID := chi.URLParam(r, "taskID")
+
+		fmt.Println("status request for:", taskID)
+
+		t, err := getTask(rdb, taskID)
+
+		if err != nil {
+			// Handle the error (e.g., log or return HTTP 404)
+			log.Printf("Failed to get task status: %v", err)
+			http.Error(w, "Task not found", http.StatusNotFound)
+			w.Write([]byte("Error getting Status"))
+		}
+
+		response := Task{
+			ID:     taskID,
+			Status: t.Status,
+		}
+
+		if t.Status == "completed" && t.UploadPath != "" {
+			fmt.Println("Calling CreatePresignURL...")
+			presignURL := CreatePresignURL(string(t.UploadPath))
+
+			fmt.Println("presignURL:", string(presignURL))
+
+			// w.Header().Set("Content-Type", "application/json")
+			// w.Write([]byte(string(presignURL)))
+
+			response.Status = "finished"
+			response.UploadPath = presignURL
+			// w.Write([]byte("FINISHED"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	})
+
 	return http.ListenAndServe(":7070", r)
 }

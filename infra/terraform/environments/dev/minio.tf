@@ -1,53 +1,73 @@
-resource "helm_release" "minio_operator" {
-  name              = "minio-operator"
-  chart             = "operator"
-  repository        = "https://operator.min.io/"
-  create_namespace  = "true"
-  namespace         = "minio-operator"
-  dependency_update = "true"
-  version           = "5.0.18"
+resource "helm_release" "minio" {
+  name       = "minio"
+  namespace  = "default"
+  repository = "https://charts.min.io/"
+  chart      = "minio"
+  version    = "5.0.14"
 
-  depends_on = [minikube_cluster.docker]
-}
-
-resource "random_password" "minio" {
-  length = 16
-}
-
-resource "kubernetes_namespace" "tenant" {
-  metadata {
-    name = "block-storage"
-  }
-}
-
-resource "kubernetes_secret" "minio_secret" {
-  metadata {
-    name      = "minio-secret"
-    namespace = kubernetes_namespace.tenant.metadata.0.name
+  set {
+    name  = "mode"
+    value = "standalone"
   }
 
-  data = {
-    accesskey = "admin"
-    secretkey = random_password.minio.result
+  set {
+    name  = "rootUser"
+    value = "minio"
   }
 
-  type = "Opaque"
-}
+  set {
+    name  = "rootPassword"
+    value = "minio123"
+  }
 
-resource "kubectl_manifest" "tenant" {
-  yaml_body = file("../../../../infra/k8s/manifests/minio-tenant.yaml")
-  depends_on = [
-    helm_release.minio_operator,
-    kubernetes_secret.minio_secret
-  ]
-}
+  set {
+    name  = "persistence.enabled"
+    value = "false"
+  }
 
-resource "kubectl_manifest" "create_bucket" {
-  yaml_body = file("../../../../infra/k8s/manifests/minio-bucket.yaml")
-  force_new = true
-  wait      = true
-  depends_on = [
-    kubectl_manifest.tenant
-  ]
-}
+  set {
+    name  = "console.enabled"
+    value = "true"
+  }
 
+  set {
+    name  = "resources.requests.memory"
+    value = "256Mi"
+  }
+
+  set {
+    name  = "service.type"
+    value = "NodePort"
+  }
+
+  set {
+    name  = "postJob.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "buckets[0].name"
+    value = "my-bucket"
+  }
+
+  set {
+    name  = "buckets[0].policy"
+    value = "download"
+  }
+
+  set {
+    name  = "env[0].name"
+    value = "MINIO_REGION"
+  }
+
+  set {
+    name  = "env[0].value"
+    value = "us-east-1"
+  }
+
+  # set {
+  #   name  = "browserRedirectUrl"
+  #   value = "http://${data.external.minikube_ip.result["ip"]}/minio"
+  # }
+
+}
