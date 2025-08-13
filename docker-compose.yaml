@@ -3,7 +3,8 @@ services:
     build: ./apps/texture_engine/.
     env_file:
     - ./apps/texture_engine/.env
-    # volumes:
+    volumes:
+    - ./apps/texture_engine/src/:/home/huggingface/
     # - "./output:/home/huggingface/output/"
     ports:
       - "8080:8080"

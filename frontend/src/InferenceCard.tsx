@@ -15,7 +15,7 @@ export const InferenceCard = () => {
     const { error, data : start_task_data, refetch } = useQuery<StatusResponse>({
         queryKey: ['repoData'],
         queryFn: async () => {
-            const response = await fetch('http://localhost:7070/inference', {
+            const response = await fetch('http://localhost:80/inference', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -47,7 +47,7 @@ export const InferenceCard = () => {
         queryFn: async () => {
 
             if (start_task_data != undefined || start_task_data != null) {
-                const response = await fetch(`http://localhost:7070/status/${start_task_data.id}`, {
+                const response = await fetch(`http://localhost:80/status/${start_task_data.id}`, {
                     method: 'GET',
                     mode: 'cors',
                 });

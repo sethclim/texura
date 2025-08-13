@@ -69,3 +69,9 @@ terraform init
 ```bash
 terraform apply
 ```
+
+Access ingress though tunnel (launch in own terminal)
+
+```bash
+minikube tunnel --profile texura-dev
+```
